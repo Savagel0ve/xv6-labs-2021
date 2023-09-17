@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "types.h": "c",
+        "stat.h": "c",
+        "istream": "c",
+        "*.tcc": "c",
+        "fs.h": "c"
+    }
+}
