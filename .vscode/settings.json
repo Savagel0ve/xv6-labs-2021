@@ -1,3 +1,10 @@
 {
-    "C_Cpp.errorSquiggles": "disabled"
+    "C_Cpp.errorSquiggles": "disabled",
+    "makefile.launchConfigurations": [
+        {
+            "cwd": "/Users/leilongshuo/xv6-labs-2021/kernel",
+            "binaryPath": "/Users/leilongshuo/xv6-labs-2021/kernel/kernel",
+            "binaryArgs": []
+        }
+    ]
 }
