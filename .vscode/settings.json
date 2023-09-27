@@ -6,5 +6,9 @@
             "binaryPath": "/Users/leilongshuo/xv6-labs-2021/kernel/kernel",
             "binaryArgs": []
         }
-    ]
+    ],
+    "files.associations": {
+        "defs.h": "c",
+        "typeinfo": "c"
+    }
 }

@@ -1,0 +1,2 @@
+cat echo
+why:use share mem can speed

@@ -438,13 +438,13 @@ void
 dfs_vmprintf(pagetable_t pagetable,int level){
   for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
-    if(pte &  PTE_V){
+    if( pte & PTE_V){
       printf("..");
       for(int i = 0; i < level; i++){
         printf(" ..");
       }
       uint64 child =  PTE2PA(pte);
-      printf("%d: pte %p pa %p %d\n",i, pte, child);
+      printf("%d: pte %p pa %p\n",i, pte, child);
       if((pte & (PTE_R|PTE_W|PTE_X)) == 0)
         dfs_vmprintf((pagetable_t)child,level+1);
     }
