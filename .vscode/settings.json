@@ -1,0 +1,10 @@
+{
+    "C_Cpp.errorSquiggles": "disabled",
+    "files.associations": {
+        "riscv.h": "c",
+        "defs.h": "c",
+        "*.tcc": "c",
+        "bitset": "c",
+        "algorithm": "c"
+    }
+}

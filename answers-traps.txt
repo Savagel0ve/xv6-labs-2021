@@ -1,0 +1,6 @@
+13 in register a2
+inline -> 8+3+1
+ra = 0x30; t=pc+4; pc=(x[ra] + sign(1510))~1 (pc=1510 + 0x30 = 1558 -> 0x616 ); x[x1]=pc+4
+ra = 0x38(return address)
+HE110 World;i = 0x726c6400;no
+use old a2
