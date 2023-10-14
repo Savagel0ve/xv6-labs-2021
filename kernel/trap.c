@@ -29,6 +29,45 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+// return 0 if va is ref to cow_page else return -1
+int cow_page(pagetable_t pagetable,uint64 va){
+  pte_t * pte;
+  if(va >= MAXVA){
+    return -1;
+  }
+  if((pte = walk(pagetable,va,0)) == 0){
+    return -1;
+  }
+  if((*pte & PTE_V) == 0){
+    return -1;
+  }
+  return (*pte & PTE_COW ? 0 : -1); 
+}
+
+int copy_page(pagetable_t pagetable,uint64 va){
+  char * mem;
+  pte_t * pte;
+  uint64 pa;
+  uint flags;
+  if((mem = kalloc()) == 0){
+    return -1; 
+  }else if((pte = walk(pagetable,va,0)) == 0){
+    return -1;
+  }else{
+    *pte &= ~PTE_COW;
+    *pte |= PTE_W;
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte);
+    memmove(mem,(char *)pa,PGSIZE);
+    uvmunmap(pagetable,va,1,1);    // set 1 to step into kfree to sub ref
+    if(mappages(pagetable,va,PGSIZE,(uint64)mem,flags) != 0){
+      kfree((void *)pa);
+      return -1;
+    }
+  }
+  return 0;
+}
+
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -67,7 +106,39 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  } else if(r_scause() == 15 || r_scause() == 13){
+    // pte_t *pte;
+    uint64 va;
+    // uint64 pa;
+    // uint flags;
+    // char* mem;
+    va = r_stval();
+    va = PGROUNDDOWN(va);
+    if(cow_page(p->pagetable,va)== 0 && copy_page(p->pagetable,va) == 0){
+        // do nothing
+    }else{
+      p -> killed = 1;
+    }
+    // if((pte = walk(p->pagetable,va,0)) == 0){
+    //  p->killed = 1;
+    // }else{
+    //   if((*pte & PTE_COW) != 0 ){
+    //     if((mem = kalloc()) == 0){
+    //       p->killed = 1;
+    //     }
+    //     pa = PTE2PA(*pte);
+    //     *pte = (*pte | PTE_W) & ~PTE_COW;
+    //     flags = PTE_FLAGS(*pte);
+    //     memmove(mem,(char *)pa,PGSIZE);
+    //     uvmunmap(p->pagetable,va,1,1);
+    //     if(mappages(p->pagetable,va,PGSIZE,(uint64)mem,flags)!=0){
+    //       kfree(mem);
+    //       p->killed = 1;
+    //     }
+    //   }else{
+    //     p->killed = 1;
+    //   }
+  }else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;

@@ -150,6 +150,8 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
       return -1;
     if(*pte & PTE_V)
       panic("mappages: remap");
+    if(perm & PTE_COW)
+      add_page_ref(pa);
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
@@ -176,8 +178,10 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: walk");
     if((*pte & PTE_V) == 0)
       panic("uvmunmap: not mapped");
-    if(PTE_FLAGS(*pte) == PTE_V)
+    if(PTE_FLAGS(*pte) == PTE_V){
       panic("uvmunmap: not a leaf");
+
+    }
     if(do_free){
       uint64 pa = PTE2PA(*pte);
       kfree((void*)pa);
@@ -302,8 +306,8 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
   pte_t *pte;
   uint64 pa, i;
-  uint flags;
-  char *mem;
+  // uint flags;
+  // char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -311,12 +315,16 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    if(*pte & PTE_W){
+      *pte &= ~PTE_W;   //clear PTW_W in the PTEs of both child and parent.
+      *pte |= PTE_COW;  //SET COW BIT
+    }
+    // do not kalloc
+    // if((mem = kalloc()) == 0)
+    //   goto err;
+    // memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(new, i, PGSIZE, pa, PTE_FLAGS(*pte)) != 0){
+      kfree((void *)pa);
       goto err;
     }
   }
@@ -346,10 +354,41 @@ uvmclear(pagetable_t pagetable, uint64 va)
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
+  if(dstva >= MAXVA){
+    return -1;
+  }
   uint64 n, va0, pa0;
-
+  pte_t *pte;
+  char *mem;
+  uint flags;
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    if((pte = walk(pagetable,va0,0)) == 0){
+      return -1;
+    }
+    if((*pte & PTE_V) == 0){
+      return -1;
+    }
+    if((*pte & PTE_U) == 0){
+      return -1;
+    }
+    if(*pte & PTE_COW){
+      if((mem = kalloc()) == 0){
+        panic("kalloc: can not kalloc");
+      }else{
+        pa0 = PTE2PA(*pte);
+        *pte = (*pte | PTE_W) & ~(PTE_COW);
+        flags = PTE_FLAGS(*pte);
+        memmove(mem,(char *)pa0,PGSIZE);
+        uvmunmap(pagetable,va0,1,1);
+        if(mappages(pagetable,va0,PGSIZE,(uint64)mem,flags) != 0){
+          kfree((void *)mem);
+          panic("copyout: can not map page");
+        }
+      }
+    }else{
+      pa0 = PTE2PA(*pte);
+    }
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
