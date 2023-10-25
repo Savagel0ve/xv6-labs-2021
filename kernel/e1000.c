@@ -92,6 +92,7 @@ e1000_init(uint32 *xregs)
   regs[E1000_IMS] = (1 << 7); // RXDW -- Receiver Descriptor Write Back
 }
 
+//lock
 int
 e1000_transmit(struct mbuf *m)
 {
@@ -102,10 +103,36 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
-  
+
+  acquire(&e1000_lock);
+  //1.First ask the E1000 for the TX ring index at which it's expecting the next packet
+  uint64 index = regs[E1000_TDT];
+  struct tx_desc * desc = &tx_ring[index];
+  //check if the the ring is overflowing.
+  if(!(desc->status & E1000_TXD_STAT_DD)){
+    release(&e1000_lock);
+    return -1;
+  }
+  // use mbuffree() to free the last mbuf that was transmitted from that descriptor (if there was one).
+  if(tx_mbufs[index]){
+    mbuffree(tx_mbufs[index]);
+  }
+  tx_mbufs[index] = m;
+  desc->addr = (uint64)m->head;
+  desc->length = m->len;
+  desc->cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
+
+  // __sync_synchronize();
+
+  //Set the necessary cmd flags (look at Section 3.3 in the E1000 manual) 
+  //and stash away a pointer to the mbuf for later freeing.
+  regs[E1000_TDT] = (index + 1) % TX_RING_SIZE;
+  //pointer??
+  release(&e1000_lock);
   return 0;
 }
 
+//lock
 static void
 e1000_recv(void)
 {
@@ -115,6 +142,25 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+  
+  uint64 index = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+  struct rx_desc * desc = &rx_ring[index];
+  while(desc->status & E1000_RXD_STAT_DD){
+    rx_mbufs[index]->len = desc->length;
+    net_rx(rx_mbufs[index]);
+    rx_mbufs[index] = mbufalloc(0);
+    if(!rx_mbufs[index]){
+      panic("e1000 no bufs");
+    }
+    desc->addr = (uint64)rx_mbufs[index]->head;
+    desc->status = 0;
+
+    index = (index + 1) % RX_RING_SIZE;
+    desc = &rx_ring[index];
+  }
+  
+  regs[E1000_RDT] = (index - 1) % RX_RING_SIZE;
+  
 }
 
 void
